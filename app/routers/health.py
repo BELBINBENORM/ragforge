@@ -1,10 +1,9 @@
 from fastapi import APIRouter
 from sqlalchemy import text
 
-import ollama
-
 from app.config import settings
 from app.database.connection import engine
+from google import genai
 
 
 router = APIRouter(
@@ -17,7 +16,7 @@ router = APIRouter(
 def health():
     return {
         "status": "ok",
-        "service": "AI Knowledge Platform",
+        "service": "RAGForge API",
     }
 
 
@@ -45,28 +44,26 @@ def database_health():
 @router.get("/llm")
 def llm_health():
     try:
-        response = ollama.list()
+        client = genai.Client(
+            api_key=settings.gemini_api_key
+        )
 
-        models = []
-
-        for model in response.models:
-            models.append(model.model)
-
-        available = any(
-            model.split(":")[0] == settings.ollama_model
-            or model == settings.ollama_model
-            for model in models
+        response = client.models.get(
+            model=settings.gemini_model
         )
 
         return {
-            "status": "ok" if available else "warning",
-            "model": settings.ollama_model,
-            "available": available,
-            "installed_models": models,
+            "status": "ok",
+            "provider": "Google Gemini",
+            "model": response.name,
+            "available": True,
         }
 
     except Exception as exc:
         return {
             "status": "error",
+            "provider": "Google Gemini",
+            "model": settings.gemini_model,
+            "available": False,
             "llm": str(exc),
         }

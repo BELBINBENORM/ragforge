@@ -10,7 +10,7 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="AI Knowledge Platform",
+    title="RAGForge",
     description=(
         "Document ingestion, semantic search, RAG, "
         "ML prediction, and agent tooling."
@@ -50,7 +50,7 @@ app.include_router(agent.router)
 @app.get("/")
 def root():
     return {
-        "message": "AI Knowledge Platform API",
+        "message": "RAGForge API is running.",
         "docs": "/docs",
         "health": "/health/",
     }

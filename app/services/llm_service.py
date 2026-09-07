@@ -1,4 +1,4 @@
-import ollama
+from google import genai
 
 from app.config import settings
 
@@ -8,7 +8,8 @@ logger = logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT = """
-You are an AI assistant for a document knowledge platform.
+You are an AI assistant for a document-based knowledge and
+question-answering system.
 
 Your job is to answer questions using the retrieved document
 context provided to you.
@@ -44,35 +45,28 @@ def build_prompt(
         for message in chat_history:
 
             role = message["role"].upper()
-
             content = message["content"]
 
             history_parts.append(
                 f"{role}: {content}"
             )
 
-        history_text = "\n".join(
-            history_parts
-        )
+        history_text = "\n".join(history_parts)
 
     return f"""
 Previous conversation:
 
 {history_text}
-
-
 Retrieved document context:
-
 {context}
-
-
 Current question:
-
 {question}
-
-
 Answer:
 """
+
+client = genai.Client(
+    api_key=settings.gemini_api_key
+)
 
 
 def generate_answer(
@@ -90,22 +84,31 @@ def generate_answer(
         chat_history=chat_history,
     )
 
-    logger.info("LLM request started using model=%s", settings.ollama_model)
+    logger.info(
+        "LLM request started using model=%s",
+        settings.gemini_model,
+    )
 
-    response = ollama.chat(
-        model=settings.ollama_model,
-        messages=[
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT,
-            },
+    response = client.models.generate_content(
+        model=settings.gemini_model,
+        contents=[
             {
                 "role": "user",
-                "content": prompt,
-            },
+                "parts": [
+                    {
+                        "text": f"""
+{SYSTEM_PROMPT}
+
+{prompt}
+"""
+                    }
+                ],
+            }
         ],
     )
 
-    answer = response["message"]["content"].strip()
+    answer = response.text.strip()
+
     logger.info("LLM response generated")
+
     return answer

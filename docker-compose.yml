@@ -8,7 +8,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d ai_knowledge"]
       interval: 5s
@@ -27,8 +27,10 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ./data/documents:/app/data/documents
-      - ./logs:/app/logs
+      - documents_data:/app/data/documents
+      - logs_data:/app/logs
 
 volumes:
   postgres_data:
+  documents_data:
+  logs_data:

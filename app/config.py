@@ -5,7 +5,9 @@ class Settings(BaseSettings):
 
     database_url: str
 
-    ollama_model: str = "llama3.2"
+    llm_provider: str = "gemini"
+    gemini_api_key: str
+    gemini_model: str = "gemini-3.6-flash"
 
     embedding_model: str = "all-MiniLM-L6-v2"
 

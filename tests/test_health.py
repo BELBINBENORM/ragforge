@@ -7,7 +7,7 @@ def test_root(client):
     data = response.json()
 
     assert data["message"] == (
-        "AI Knowledge Platform API"
+        "RAGForge API"
     )
 
 
