@@ -2,12 +2,15 @@ import logging
 import time
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.logging_config import configure_logging
 from app.routers import chat, documents, health, search, agent
 
+
 configure_logging()
 logger = logging.getLogger(__name__)
+
 
 app = FastAPI(
     title="RAGForge",
@@ -18,6 +21,14 @@ app = FastAPI(
     version="1.1.0",
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.middleware("http")
 async def request_logging_middleware(request: Request, call_next):
@@ -26,10 +37,15 @@ async def request_logging_middleware(request: Request, call_next):
     try:
         response = await call_next(request)
     except Exception:
-        logger.exception("Unhandled request error: %s %s", request.method, request.url.path)
+        logger.exception(
+            "Unhandled request error: %s %s",
+            request.method,
+            request.url.path,
+        )
         raise
 
     duration_ms = (time.perf_counter() - started) * 1000
+
     logger.info(
         "%s %s -> %s (%.2f ms)",
         request.method,
@@ -37,6 +53,7 @@ async def request_logging_middleware(request: Request, call_next):
         response.status_code,
         duration_ms,
     )
+
     return response
 
 
