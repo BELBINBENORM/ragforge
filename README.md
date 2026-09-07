@@ -733,5 +733,5 @@ AI-powered document knowledge platform combining semantic search, RAG, conversat
 
 **GitHub:** https://github.com/BELBINBENORM/ragforge
 
-**Live API:** [ADD RENDER DEPLOYMENT LINK HERE]
+**Live API:** https://ragforge-htnl.onrender.com/docs
 
