@@ -8,12 +8,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 COPY requirements.txt .
 
-# Install CPU-only PyTorch.
 RUN pip install --no-cache-dir --prefer-binary \
     torch \
     --index-url https://download.pytorch.org/whl/cpu
 
-# Install the remaining application dependencies.
 RUN pip install --no-cache-dir --prefer-binary \
     -r requirements.txt
 
