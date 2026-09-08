@@ -1,246 +1,445 @@
 # RAGForge
 
-A production-style AI knowledge platform built with **FastAPI, PostgreSQL, pgvector, Google Gemini, and Retrieval-Augmented Generation (RAG)**.
+### Live RAG & Agent Pipeline with MCP
 
-RAGForge allows users to upload documents, process and embed their content, perform semantic search, and interact with an LLM using retrieved document context. It also includes conversational chat, internal LLM tool calling, structured logging, health checks, testing, Docker support, and cloud deployment readiness.
+RAGForge is a production-style AI knowledge platform that combines **Retrieval-Augmented Generation (RAG), semantic vector search, conversational memory, LLM agents, and Model Context Protocol (MCP)** into a modular FastAPI backend.
+
+The platform supports document ingestion, embedding generation, vector retrieval, persistent conversations, and agentic tool use through MCP.
 
 ---
 
-## 🧠 Architecture
+## 🚀 Live API
+
+**Swagger / OpenAPI Documentation**
+
+https://ragforge-htnl.onrender.com/docs
+
+> ⚠️ **Free Hosting Notice**
+>
+> RAGForge is deployed on Render's free tier. The service may spin down after inactivity. The first request can take some time while the service wakes up.
+
+---
+
+# 🧠 Architecture
+
+RAGForge follows an **Agent → MCP Client → MCP Server → Tools → Services** architecture.
 
 ```text
-                    User
-                      |
-                      v
-                FastAPI API
-                      |
-          +-----------+-----------+
-          |                       |
-          v                       v
-   Document Pipeline          Chat / Agent
-          |                       |
-          v                       v
-    Text Extraction          Google Gemini
-          |
-          v
-       Chunking
-          |
-          v
- Sentence Transformer
-          |
-          v
- PostgreSQL + pgvector
-          |
-          v
-    Vector Search
-          |
-          v
- Retrieved Context
-          |
-          v
-    Google Gemini
-          |
-          v
-     RAG Answer
+                              ┌──────────────────────┐
+                              │       Client         │
+                              │      API / UI        │
+                              └──────────┬───────────┘
+                                         │
+                                         ▼
+                              ┌──────────────────────┐
+                              │       FastAPI        │
+                              │      REST API        │
+                              └──────────┬───────────┘
+                                         │
+                    ┌────────────────────┼────────────────────┐
+                    │                    │                    │
+                    ▼                    ▼                    ▼
+             ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+             │  Documents  │     │   Search    │     │    Agent    │
+             │   Router    │     │   Router    │     │   Router    │
+             └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
+                    │                   │                    │
+                    ▼                   ▼                    ▼
+             Document Service     Search Service       Agent Service
+                                                           │
+                                                           ▼
+                                                    ┌─────────────┐
+                                                    │   Gemini    │
+                                                    │    Agent    │
+                                                    └──────┬──────┘
+                                                           │
+                                                       MCP Client
+                                                           │
+                                                           ▼
+                                                    ┌─────────────┐
+                                                    │ MCP Server  │
+                                                    └──────┬──────┘
+                                                           │
+                                      ┌────────────────────┴────────────────────┐
+                                      │                                         │
+                                      ▼                                         ▼
+                              search_documents                    get_conversation_history
+                                      │                                         │
+                                      ▼                                         ▼
+                                   pgvector                                 PostgreSQL
+                                      │                                         │
+                                      └────────────────────┬────────────────────┘
+                                                           │
+                                                           ▼
+                                                    Tool Results
+                                                           │
+                                                           ▼
+                                                    Gemini Agent
+                                                           │
+                                                           ▼
+                                                    Final Response
 ```
 
-### Agent / Tool Calling
+---
+
+# 🔄 Agentic RAG Flow
+
+The main question-answering workflow is handled through the AI agent.
 
 ```text
-User
- |
- v
-LLM Agent
- |
- +---- search_documents()
- |
- +---- get_conversation_history()
- |
- v
-Tool Results
- |
- v
-Google Gemini
- |
- v
-Final Answer
+User Question
+      │
+      ▼
+POST /agent/run
+      │
+      ▼
+Gemini Agent
+      │
+      ▼
+MCP Client
+      │
+      ▼
+MCP Server
+      │
+      ├──────────────► search_documents
+      │                     │
+      │                     ▼
+      │               Query Embedding
+      │                     │
+      │                     ▼
+      │                  pgvector
+      │                     │
+      │                     ▼
+      │              Relevant Chunks
+      │
+      └──────────────► get_conversation_history
+                            │
+                            ▼
+                       PostgreSQL
+                            │
+                            ▼
+                     Chat History
+                            │
+                            ▼
+                       Tool Results
+                            │
+                            ▼
+                     Gemini Agent
+                            │
+                            ▼
+                      Final Answer
+                            │
+                            ▼
+                  Persist Conversation
 ```
 
----
-
-## ✨ Features
-
-* FastAPI REST API
-* PostgreSQL database
-* pgvector semantic search
-* SQLAlchemy ORM
-* PDF, DOCX and TXT document ingestion
-* Automatic text extraction
-* Configurable text chunking
-* 384-dimensional embeddings
-* Sentence Transformers embedding model
-* Retrieval-Augmented Generation
-* Google Gemini LLM integration
-* Conversational chat sessions
-* Conversation history
-* Internal LLM tool calling
-* Document search tool
-* Conversation history tool
-* Structured application logging
-* Database health checks
-* LLM health checks
-* Pytest test suite
-* Docker support
-* Neon PostgreSQL support
-* Render deployment support
+The agent can dynamically determine which MCP tools are required and execute them before generating the final response.
 
 ---
 
-# 🔄 RAG Pipeline
+# 🧩 MCP Layer
+
+MCP provides the interface between the AI agent and application capabilities.
+
+### MCP Client
+
+The MCP client:
+
+1. Connects to the MCP server.
+2. Discovers available tools.
+3. Retrieves tool definitions.
+4. Provides tool definitions to Gemini.
+5. Executes tool calls requested by the agent.
+6. Returns tool results to the agent.
 
 ```text
-Upload Document
-       |
-       v
-Extract Text
-       |
-       v
-Create Chunks
-       |
-       v
-Generate Embeddings
-       |
-       v
-Store Embeddings
-       |
-       v
-Neon PostgreSQL + pgvector
-       |
-       v
-Semantic Vector Search
-       |
-       v
-Retrieve Relevant Chunks
-       |
-       v
-Build RAG Context
-       |
-       v
-Google Gemini
-       |
-       v
-Answer with Retrieved Sources
+MCP Client
+    │
+    ▼
+list_tools()
+    │
+    ▼
+Tool Definitions
+    │
+    ▼
+Gemini Agent
+    │
+    ▼
+call_tool()
+    │
+    ▼
+MCP Server
 ```
-
-The application uses `all-MiniLM-L6-v2` by default for generating 384-dimensional embeddings.
 
 ---
 
-# 🤖 LLM
+# 🛠️ MCP Tools
 
-RAGForge uses **Google Gemini** for:
+## `search_documents`
 
-* RAG question answering
-* Conversational chat
-* Agent/tool calling
-* LLM health checks
-
-The LLM configuration is controlled through environment variables.
+Performs semantic document retrieval using embeddings and PostgreSQL `pgvector`.
 
 ```text
-LLM_PROVIDER=gemini
-GEMINI_API_KEY=your_api_key
-GEMINI_MODEL=your_gemini_model
+User Query
+    │
+    ▼
+Embedding Model
+    │
+    ▼
+Query Vector
+    │
+    ▼
+pgvector Similarity Search
+    │
+    ▼
+Relevant Chunks
 ```
 
-The application does **not** depend on Ollama in the current architecture.
+## `get_conversation_history`
+
+Retrieves previous messages for a conversation session from PostgreSQL.
+
+```text
+Session ID
+    │
+    ▼
+PostgreSQL
+    │
+    ▼
+Conversation History
+```
 
 ---
 
-# 🗄️ Database
+# 📚 Document Ingestion Pipeline
 
-RAGForge uses:
+Documents are transformed into searchable knowledge through the following pipeline:
 
-**PostgreSQL + pgvector**
+```text
+Document Upload
+      │
+      ▼
+Text Extraction
+      │
+      ├── PDF
+      ├── DOCX
+      └── TXT
+      │
+      ▼
+Text Chunking
+      │
+      ▼
+Embedding Generation
+      │
+      ▼
+Sentence Transformers
+      │
+      ▼
+PostgreSQL + pgvector
+```
 
-For cloud deployment, the recommended database is:
+### Supported Formats
 
-**Neon PostgreSQL**
+- PDF
+- DOCX
+- TXT
+
+### Embedding Model
+
+```text
+all-MiniLM-L6-v2
+```
+
+---
+
+# 🔎 Semantic Search
+
+RAGForge uses PostgreSQL with `pgvector` for vector similarity search.
+
+```text
+Query
+  │
+  ▼
+Embedding Model
+  │
+  ▼
+Query Vector
+  │
+  ▼
+pgvector
+  │
+  ▼
+Similarity Ranking
+  │
+  ▼
+Top-K Relevant Chunks
+```
+
+Retrieval behavior can be configured using:
+
+- `TOP_K`
+- `SIMILARITY_THRESHOLD`
+
+---
+
+# 🤖 AI Agent
+
+Google Gemini powers the agent layer.
+
+The agent is responsible for:
+
+- Understanding user requests
+- Discovering available MCP tools
+- Deciding when tools are required
+- Executing MCP tools
+- Processing retrieved context
+- Using conversation history
+- Generating the final response
+
+The agent follows a tool-use loop:
+
+```text
+Question
+   │
+   ▼
+Reason
+   │
+   ├── No tool required ───────► Answer
+   │
+   └── Tool required
+          │
+          ▼
+       MCP Tool
+          │
+          ▼
+      Tool Result
+          │
+          ▼
+       Reason Again
+          │
+          ▼
+        Answer
+```
+
+---
+
+# 💬 Conversational Memory
+
+RAGForge maintains persistent conversation sessions using PostgreSQL.
+
+```text
+Chat Session
+     │
+     ├── User Message
+     │
+     ├── Assistant Message
+     │
+     ├── User Message
+     │
+     └── Assistant Message
+```
+
+The agent can access previous messages through:
+
+```text
+get_conversation_history()
+```
+
+This allows contextual follow-up questions across multiple turns.
+
+---
+
+# 🗄️ Database Architecture
+
+RAGForge uses **PostgreSQL + pgvector**.
 
 The database stores:
 
-* Documents
-* Document chunks
-* Embeddings
-* Chat sessions
-* Chat messages
+- Documents
+- Document chunks
+- Embeddings
+- Chat sessions
+- Chat messages
 
-Vector similarity search is handled using PostgreSQL's `pgvector` extension.
+SQLAlchemy provides the database abstraction layer.
+
+```text
+                    PostgreSQL
+                        │
+             ┌──────────┴──────────┐
+             │                     │
+             ▼                     ▼
+       Document Data          Chat Data
+             │                     │
+             ▼                     ▼
+          pgvector            Sessions
+          Embeddings          Messages
+```
 
 ---
 
-# 🌐 Production Architecture
-
-The intended deployment architecture is:
+# 🌐 Deployment Architecture
 
 ```text
                          Internet
-                            |
-                            v
-                     Render Web Service
-                            |
-                            v
-                      RAGForge API
-                       FastAPI
-                            |
-              +-------------+-------------+
-              |                           |
-              v                           v
-       Neon PostgreSQL              Google Gemini
-          + pgvector                    API
-              |
-              v
-        Document Data
-        Vector Embeddings
-        Chat History
+                            │
+                            ▼
+                     ┌─────────────┐
+                     │   Render    │
+                     │ Web Service │
+                     └──────┬──────┘
+                            │
+                            ▼
+                     ┌─────────────┐
+                     │  RAGForge   │
+                     │   FastAPI   │
+                     └──────┬──────┘
+                            │
+              ┌─────────────┼─────────────┐
+              │             │             │
+              ▼             ▼             ▼
+        PostgreSQL       Gemini API     MCP Layer
+        + pgvector
 ```
 
-### Services
+### Deployment Stack
 
-| Component        | Technology            |
-| ---------------- | --------------------- |
-| API              | FastAPI               |
-| Language         | Python                |
-| LLM              | Google Gemini         |
-| Embeddings       | Sentence Transformers |
-| Vector Database  | PostgreSQL + pgvector |
-| Cloud Database   | Neon                  |
-| Hosting          | Render                |
-| ORM              | SQLAlchemy            |
-| Testing          | Pytest                |
-| Containerization | Docker                |
+| Component | Technology |
+|---|---|
+| API | FastAPI |
+| Language | Python |
+| LLM | Google Gemini |
+| Agent | Gemini Agent |
+| Protocol | Model Context Protocol |
+| MCP | MCP Client + MCP Server |
+| RAG | Retrieval-Augmented Generation |
+| Embeddings | Sentence Transformers |
+| Vector Database | PostgreSQL + pgvector |
+| ORM | SQLAlchemy |
+| Database Hosting | Neon PostgreSQL |
+| Application Hosting | Render |
+| Containerization | Docker |
+| Testing | Pytest |
 
 ---
 
-# 🚀 API
-
-## Root
-
-```text
-GET /
-```
+# 📡 API Endpoints
 
 ## Health
 
-```text
+```http
 GET /health/
 GET /health/database
 GET /health/llm
 ```
 
+Used to verify application, database and LLM availability.
+
+---
+
 ## Documents
 
-```text
+```http
 POST /documents/upload
 
 GET /documents/
@@ -254,38 +453,58 @@ GET /documents/{document_id}/chunks
 DELETE /documents/{document_id}
 ```
 
+Handles document upload, processing, retrieval and deletion.
+
+---
+
 ## Search
 
-```text
+```http
 POST /search/
 ```
 
-## Chat
+Provides direct semantic search over indexed documents.
 
-```text
+---
+
+## Chat Sessions
+
+```http
 POST /chat/sessions
 
 GET /chat/sessions
 
 GET /chat/sessions/{session_id}
 
-POST /chat/sessions/{session_id}/ask
+PATCH /chat/sessions/{session_id}
+
+DELETE /chat/sessions/{session_id}
 
 GET /chat/sessions/{session_id}/messages
 ```
 
+Handles persistent chat sessions and conversation history.
+
+---
+
 ## Agent
 
-```text
-POST /agent/
+```http
+POST /agent/run
 ```
 
-The agent can use internal tools for:
+Main agentic question-answering endpoint.
 
-```text
-search_documents()
-get_conversation_history()
+Example:
+
+```json
+{
+  "question": "What skills are mentioned in my resume?",
+  "session_id": 1
+}
 ```
+
+The agent can dynamically invoke MCP tools when additional context is required.
 
 ---
 
@@ -295,12 +514,11 @@ get_conversation_history()
 ragforge/
 │
 ├── app/
+│   │
 │   ├── agents/
-│   │   ├── agent.py
-│   │   └── tools.py
+│   │   └── agent.py
 │   │
 │   ├── core/
-│   │   ├── config.py
 │   │   └── logging_config.py
 │   │
 │   ├── database/
@@ -308,6 +526,11 @@ ragforge/
 │   │   ├── init_db.py
 │   │   ├── models.py
 │   │   └── session.py
+│   │
+│   ├── mcp/
+│   │   ├── client.py
+│   │   ├── server.py
+│   │   └── tools.py
 │   │
 │   ├── routers/
 │   │   ├── agent.py
@@ -356,7 +579,7 @@ ragforge/
 
 # ⚙️ Local Setup
 
-## 1. Clone the repository
+## 1. Clone
 
 ```bash
 git clone https://github.com/BELBINBENORM/ragforge.git
@@ -364,27 +587,25 @@ git clone https://github.com/BELBINBENORM/ragforge.git
 cd ragforge
 ```
 
-## 2. Create a virtual environment
-
-```bash
-python -m venv .venv
-```
-
-Activate it.
+## 2. Create Virtual Environment
 
 ### Windows
 
 ```bash
+python -m venv .venv
+
 .venv\Scripts\activate
 ```
 
 ### Linux / macOS
 
 ```bash
+python -m venv .venv
+
 source .venv/bin/activate
 ```
 
-## 3. Install dependencies
+## 3. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
@@ -394,10 +615,10 @@ pip install -r requirements.txt
 
 # 🔐 Environment Variables
 
-Create a `.env` file:
+Create a `.env` file using `.env.example`.
 
-```text
-DATABASE_URL=your_neon_postgresql_connection_string
+```env
+DATABASE_URL=your_postgresql_connection_string
 
 GEMINI_API_KEY=your_gemini_api_key
 
@@ -420,33 +641,29 @@ MAX_FILE_SIZE_MB=20
 MAX_CHAT_HISTORY=10
 ```
 
-Never commit `.env` to Git.
+Never commit `.env` files or API keys to source control.
 
 ---
 
-# 🗃️ Database Initialization
+# 🗃️ Database Setup
 
-After configuring the database:
+Initialize the database:
 
 ```bash
 python -m app.database.init_db
 ```
 
-This initializes the required PostgreSQL tables and enables the `vector` extension.
-
-For Neon, the database must support the `pgvector` extension.
+PostgreSQL must have the `pgvector` extension available.
 
 ---
 
 # ▶️ Run Locally
 
-Start the API:
-
 ```bash
 uvicorn app.main:app --reload
 ```
 
-Open the interactive API documentation:
+Open the API documentation:
 
 ```text
 http://127.0.0.1:8000/docs
@@ -454,9 +671,31 @@ http://127.0.0.1:8000/docs
 
 ---
 
+# 🐳 Docker
+
+Build the application:
+
+```bash
+docker compose build
+```
+
+Start the services:
+
+```bash
+docker compose up
+```
+
+API:
+
+```text
+http://localhost:8000
+```
+
+---
+
 # 🧪 Testing
 
-Run the complete test suite:
+Run the test suite:
 
 ```bash
 pytest -v
@@ -464,244 +703,142 @@ pytest -v
 
 Tests cover:
 
-* Document operations
-* Text chunking
-* Semantic search
-* Chat functionality
-* Health endpoints
-* Agent request validation
+- Agent functionality
+- Chat operations
+- Document operations
+- Text chunking
+- Semantic search
+- Health endpoints
+- Request validation
 
 ---
 
 # 📝 Logging
 
-Application logs are written to:
+RAGForge includes application-level logging and HTTP request middleware.
 
-```text
-logs/app.log
-```
+The system records:
 
-The API records:
+- HTTP method
+- Request path
+- Response status
+- Request duration
+- Application events
+- Exceptions
 
-* Request method
-* Request path
-* Response status
-* Request duration
-* Application events
-
-Sensitive information such as API keys, passwords and database credentials must never be logged.
+Sensitive credentials should never be written to logs.
 
 ---
 
-# 🐳 Docker
+# 🏗️ Design Principles
 
-RAGForge includes Docker support for local development and deployment.
-
-Build the image:
-
-```bash
-docker compose build
-```
-
-Start the application:
-
-```bash
-docker compose up
-```
-
-The application image is:
+### Separation of Concerns
 
 ```text
-ragforge:latest
+Routers
+   │
+   ▼
+Services
+   │
+   ▼
+Database / External APIs
 ```
 
-The API container is:
+Each layer has a defined responsibility.
 
-```text
-ragforge
-```
+### MCP Tool Abstraction
 
-The Compose project is configured as:
+The agent interacts with application capabilities through MCP instead of depending directly on internal service implementations.
 
-```text
-ragforge
-```
+### Reusable Services
+
+Core capabilities such as:
+
+- Document processing
+- Chunking
+- Embedding generation
+- Semantic search
+- Chat persistence
+
+are implemented as independent services.
+
+### Configuration Driven
+
+Core behavior is controlled through environment variables rather than hard-coded values.
 
 ---
 
-# ☁️ Deployment
-
-RAGForge is designed for cloud deployment using:
+# 🔁 Complete System
 
 ```text
-Render
-   |
-   v
-RAGForge FastAPI
-   |
-   +---- Neon PostgreSQL + pgvector
-   |
-   +---- Google Gemini API
-```
-
-### Render
-
-The FastAPI application can be deployed as a Render Web Service using the included `Dockerfile`.
-
-The application listens on:
-
-```text
-0.0.0.0:8000
-```
-
-The production deployment should use the `PORT` provided by the hosting platform if required by the deployment configuration.
-
-### Neon
-
-Neon provides the managed PostgreSQL database used by the production deployment.
-
-The `DATABASE_URL` environment variable should contain the Neon connection string.
-
-### Google Gemini
-
-The Gemini API is accessed through the configured:
-
-```text
-GEMINI_API_KEY
-```
-
-and:
-
-```text
-GEMINI_MODEL
+                    ┌─────────────────────┐
+                    │        User         │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                       POST /agent/run
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │    Gemini Agent     │
+                    └──────────┬──────────┘
+                               │
+                          MCP Client
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │     MCP Server      │
+                    └──────────┬──────────┘
+                               │
+                 ┌─────────────┴─────────────┐
+                 │                           │
+                 ▼                           ▼
+        search_documents          get_conversation_history
+                 │                           │
+                 ▼                           ▼
+             pgvector                  PostgreSQL
+                 │                           │
+                 └─────────────┬─────────────┘
+                               │
+                               ▼
+                         Tool Results
+                               │
+                               ▼
+                         Gemini Agent
+                               │
+                               ▼
+                         Final Answer
+                               │
+                               ▼
+                       Chat Persistence
 ```
 
 ---
 
-# ❤️ Health Checks
+# 🎯 Key Features
 
-RAGForge provides dedicated endpoints for deployment monitoring.
-
-### API
-
-```text
-GET /health/
-```
-
-### Database
-
-```text
-GET /health/database
-```
-
-### Gemini
-
-```text
-GET /health/llm
-```
-
-These endpoints can be used to verify the application's API, database and LLM dependencies.
-
----
-
-# 🔒 Production Considerations
-
-For production deployment:
-
-* Store secrets using Render environment variables
-* Use Neon for managed PostgreSQL
-* Enable pgvector in the database
-* Never commit `.env`
-* Never expose database credentials
-* Use HTTPS
-* Configure persistent document storage
-* Monitor application logs
-* Configure health checks
-* Restrict uploaded file sizes
-* Avoid logging sensitive values
-* Use production-grade environment configuration
-
----
-
-# 🧩 MCP
-
-MCP is **not implemented in the current version**.
-
-RAGForge currently uses an internal tool-calling architecture where the LLM can invoke application-level tools such as:
-
-```text
-search_documents()
-get_conversation_history()
-```
-
-This provides a foundation for exploring MCP separately without unnecessarily coupling the current RAG backend to the protocol.
-
----
-
-# 🎯 Why There Is No ML Prediction Endpoint
-
-RAGForge is intentionally focused on:
-
-```text
-Document Intelligence
-        +
-Semantic Search
-        +
-RAG
-        +
-LLM Applications
-```
-
-Traditional ML prediction, TensorFlow projects, model training and predictive modeling belong to separate projects in the overall AI/ML portfolio.
-
-Adding an unrelated prediction endpoint would make this application less coherent.
-
----
-
-# 🔄 End-to-End Flow
-
-```text
-User
- |
- v
-Upload Document
- |
- v
-Extract Text
- |
- v
-Chunk Document
- |
- v
-Generate Embeddings
- |
- v
-Store in Neon PostgreSQL
- |
- v
-User asks a question
- |
- v
-Generate Query Embedding
- |
- v
-Vector Similarity Search
- |
- v
-Retrieve Relevant Chunks
- |
- v
-Build RAG Prompt
- |
- v
-Google Gemini
- |
- v
-Generate Answer
- |
- v
-Return Answer + Retrieved Sources
-```
+- Document ingestion pipeline
+- PDF, DOCX and TXT support
+- Text chunking
+- Sentence Transformer embeddings
+- PostgreSQL vector search
+- pgvector similarity retrieval
+- Retrieval-Augmented Generation
+- Gemini-powered AI agent
+- MCP client and MCP server
+- Dynamic MCP tool discovery
+- MCP tool invocation
+- Conversation memory
+- Persistent chat sessions
+- FastAPI REST API
+- Swagger / OpenAPI documentation
+- Docker support
+- Database health checks
+- LLM health checks
+- Application logging
+- Pytest test suite
+- Environment-based configuration
+- Cloud deployment
 
 ---
 
@@ -709,29 +846,64 @@ Return Answer + Retrieved Sources
 
 ```text
 Python
-FastAPI
-PostgreSQL
-pgvector
-SQLAlchemy
-Google Gemini
-Sentence Transformers
-PyMuPDF
-python-docx
-Pytest
-Docker
-Neon
-Render
+│
+├── FastAPI
+├── Pydantic
+├── SQLAlchemy
+│
+├── Google Gemini
+│
+├── Model Context Protocol
+│   ├── MCP Client
+│   └── MCP Server
+│
+├── Sentence Transformers
+│
+├── PostgreSQL
+│   └── pgvector
+│
+├── PyMuPDF
+├── python-docx
+│
+├── Pytest
+│
+└── Docker
 ```
 
 ---
 
-# 📌 Project
+# 📌 Project Status
 
-**RAGForge**
+**Status:** Deployed
 
-AI-powered document knowledge platform combining semantic search, RAG, conversational AI and LLM tool calling into a production-style FastAPI backend.
+**Architecture:** Agentic RAG + MCP
 
-**GitHub:** https://github.com/BELBINBENORM/ragforge
+**API:** FastAPI
 
-**Live API:** https://ragforge-htnl.onrender.com/docs
+**LLM:** Google Gemini
 
+**Vector Search:** PostgreSQL + pgvector
+
+**Embeddings:** Sentence Transformers
+
+**Deployment:** Render + Neon PostgreSQL
+
+---
+
+# 🔗 Links
+
+### GitHub
+
+https://github.com/BELBINBENORM/ragforge
+
+### Live API
+
+https://ragforge-htnl.onrender.com/docs
+
+---
+
+## 👨‍💻 RAGForge
+
+**Live RAG & Agent Pipeline with MCP**
+
+A production-style AI knowledge platform demonstrating how **RAG, vector databases, conversational memory, LLM agents, MCP tools, FastAPI, PostgreSQL and Docker** can be combined into a modular AI backend.
