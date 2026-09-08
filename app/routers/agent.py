@@ -13,7 +13,7 @@ router = APIRouter(
 
 
 @router.post("/run", response_model=AgentResponse)
-def run_agent_endpoint(
+async def run_agent_endpoint(
     request: AgentRequest,
     db: Session = Depends(get_db),
 ):
@@ -25,11 +25,15 @@ def run_agent_endpoint(
             content=request.question,
         )
 
-    answer = run_agent(
-        db=db,
-        question=request.question,
-        session_id=request.session_id,
-    )
+        try:
+            answer = await run_agent(
+            question=request.question,
+            session_id=request.session_id,
+            )
+        except Exception:
+            return AgentResponse(
+                answer="The AI service is temporarily unavailable. Please try again in a few minutes."
+                )
 
     if request.session_id is not None:
         save_message(
